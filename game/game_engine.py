@@ -1,5 +1,7 @@
+import json
 import pygame
 import random
+from pathlib import Path
 from game.player import Player,LANE_W
 from game.traffic import Car,make_car
 
@@ -12,6 +14,7 @@ WATER_Y=HEIGHT//2-35
 WATER_H=70
 RAFT_W=180
 RAFT_SPEED=2
+HIGH_SCORE_PATH=Path(__file__).resolve().parent.parent/"high_scores.json"
 
 class GameEngine:
     def __init__(self):
@@ -21,6 +24,8 @@ class GameEngine:
         self.clock=pygame.time.Clock()
         self.font=pygame.font.SysFont("monospace",24,bold=True)
         self.big_font=pygame.font.SysFont("monospace",44,bold=True)
+        self.high_score_path=HIGH_SCORE_PATH
+        self.high_scores=self._load_high_scores()
         self.reset()
 
     def reset(self):
@@ -34,8 +39,31 @@ class GameEngine:
         self.raft=pygame.Rect(WIDTH//2-RAFT_W//2,WATER_Y,RAFT_W,WATER_H)
         self.raft_speed=RAFT_SPEED
         self.riding_raft=False
+        self.score_saved=False
         self.game_over=False
         self.won=False
+
+    def _load_high_scores(self):
+        try:
+            with self.high_score_path.open(encoding="utf-8") as scores_file:
+                scores=json.load(scores_file)
+        except (OSError,UnicodeDecodeError,json.JSONDecodeError):
+            return []
+        if not isinstance(scores,list):
+            return []
+        valid_scores=[score for score in scores if isinstance(score,int) and not isinstance(score,bool) and score>=0]
+        return sorted(valid_scores,reverse=True)[:5]
+
+    def _record_score(self):
+        if self.score_saved:
+            return
+        self.score_saved=True
+        self.high_scores=sorted([*self.high_scores,self.score//10],reverse=True)[:5]
+        try:
+            with self.high_score_path.open("w",encoding="utf-8") as scores_file:
+                json.dump(self.high_scores,scores_file)
+        except OSError:
+            pass
 
     def handle_events(self):
         for event in pygame.event.get():
@@ -84,6 +112,8 @@ class GameEngine:
         if self.score%300==0: self.speed=min(10,self.speed+0.5)
         if self.player.rect.top<=10:
             self.won=True
+        if self.game_over or self.won:
+            self._record_score()
 
     def draw(self):
         self.screen.fill(BG)
@@ -121,8 +151,14 @@ class GameEngine:
         self.screen.blit(ov,(0,0))
         m=self.big_font.render(text,True,color)
         sub=self.font.render("Press R to Restart",True,(200,200,200))
-        self.screen.blit(m,(WIDTH//2-m.get_width()//2,HEIGHT//2-40))
-        self.screen.blit(sub,(WIDTH//2-sub.get_width()//2,HEIGHT//2+20))
+        title=self.font.render("TOP 5 SCORES",True,(220,220,220))
+        self.screen.blit(m,(WIDTH//2-m.get_width()//2,HEIGHT//2-170))
+        self.screen.blit(sub,(WIDTH//2-sub.get_width()//2,HEIGHT//2-115))
+        self.screen.blit(title,(WIDTH//2-title.get_width()//2,HEIGHT//2-65))
+        for index in range(5):
+            score=self.high_scores[index] if index<len(self.high_scores) else "--"
+            row=self.font.render(f"{index+1}. {score}",True,(200,200,200))
+            self.screen.blit(row,(WIDTH//2-row.get_width()//2,HEIGHT//2-30+index*26))
 
     def run(self):
         running=True
