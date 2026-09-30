@@ -26,6 +26,7 @@ class GameEngine:
         self.spawn_interval=50
         self.speed=3
         self.score=0
+        self.lives=3
         self.game_over=False
         self.won=False
 
@@ -47,8 +48,13 @@ class GameEngine:
             self.spawn_interval=max(22,self.spawn_interval-0.2)
         for c in self.cars:
             c.update()
-            if c.rect.colliderect(self.player.rect):
+        if any(c.rect.colliderect(self.player.rect) for c in self.cars):
+            self.lives-=1
+            if self.lives==0:
                 self.game_over=True
+            else:
+                self.player=Player(WIDTH//2,HEIGHT-80)
+                self.cars=[]
         self.cars=[c for c in self.cars if not c.off_screen(HEIGHT)]
         self.score+=1
         if self.score%300==0: self.speed=min(10,self.speed+0.5)
@@ -70,7 +76,7 @@ class GameEngine:
         self.player.draw(self.screen)
         hud=pygame.Rect(0,0,WIDTH,30)
         pygame.draw.rect(self.screen,(20,20,20),hud)
-        s=self.font.render(f"Score: {self.score//10}  GOAL: reach the top!  R=Restart",True,(220,220,220))
+        s=self.font.render(f"Score: {self.score//10}  Lives: {self.lives}  Reach top  R=Restart",True,(220,220,220))
         self.screen.blit(s,(6,4))
         if self.game_over:
             self._msg("CRASHED!",(220,60,60))
