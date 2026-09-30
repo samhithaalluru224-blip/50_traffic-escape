@@ -8,6 +8,10 @@ WIDTH=LANES*LANE_W
 HEIGHT=600
 FPS=60
 BG=(60,60,60)
+WATER_Y=HEIGHT//2-35
+WATER_H=70
+RAFT_W=180
+RAFT_SPEED=2
 
 class GameEngine:
     def __init__(self):
@@ -27,6 +31,9 @@ class GameEngine:
         self.speed=3
         self.score=0
         self.lives=3
+        self.raft=pygame.Rect(WIDTH//2-RAFT_W//2,WATER_Y,RAFT_W,WATER_H)
+        self.raft_speed=RAFT_SPEED
+        self.riding_raft=False
         self.game_over=False
         self.won=False
 
@@ -38,6 +45,17 @@ class GameEngine:
 
     def update(self):
         if self.game_over or self.won: return
+        previous_raft_x=self.raft.x
+        self.raft.x+=self.raft_speed
+        if self.raft.left<0:
+            self.raft.left=0
+            self.raft_speed=abs(self.raft_speed)
+        elif self.raft.right>WIDTH:
+            self.raft.right=WIDTH
+            self.raft_speed=-abs(self.raft_speed)
+        raft_dx=self.raft.x-previous_raft_x
+        if self.riding_raft:
+            self.player.rect.x=max(0,min(WIDTH-self.player.rect.width,self.player.rect.x+raft_dx))
         keys=pygame.key.get_pressed()
         self.player.move(keys,0,WIDTH)
         self.timer+=1
@@ -48,13 +66,19 @@ class GameEngine:
             self.spawn_interval=max(22,self.spawn_interval-0.2)
         for c in self.cars:
             c.update()
-        if any(c.rect.colliderect(self.player.rect) for c in self.cars):
+        in_water=self.player.rect.colliderect(pygame.Rect(0,WATER_Y,WIDTH,WATER_H))
+        on_raft=in_water and self.player.rect.colliderect(self.raft)
+        hit_by_car=not on_raft and any(c.rect.colliderect(self.player.rect) for c in self.cars)
+        if hit_by_car or (in_water and not on_raft):
             self.lives-=1
+            self.riding_raft=False
             if self.lives==0:
                 self.game_over=True
             else:
                 self.player=Player(WIDTH//2,HEIGHT-80)
                 self.cars=[]
+        else:
+            self.riding_raft=on_raft
         self.cars=[c for c in self.cars if not c.off_screen(HEIGHT)]
         self.score+=1
         if self.score%300==0: self.speed=min(10,self.speed+0.5)
@@ -73,6 +97,13 @@ class GameEngine:
         pygame.draw.rect(self.screen,(150,130,110),pygame.Rect(0,HEIGHT-50,WIDTH,50))
         pygame.draw.rect(self.screen,(150,130,110),pygame.Rect(0,0,WIDTH,30))
         for c in self.cars: c.draw(self.screen)
+        pygame.draw.rect(self.screen,(28,115,150),pygame.Rect(0,WATER_Y,WIDTH,WATER_H))
+        pygame.draw.line(self.screen,(90,185,195),(0,WATER_Y),(WIDTH,WATER_Y),2)
+        pygame.draw.line(self.screen,(90,185,195),(0,WATER_Y+WATER_H),(WIDTH,WATER_Y+WATER_H),2)
+        raft_visual=pygame.Rect(self.raft.x,WATER_Y+7,RAFT_W,WATER_H-14)
+        pygame.draw.rect(self.screen,(135,86,44),raft_visual,border_radius=8)
+        for x in range(self.raft.x+24,self.raft.right,28):
+            pygame.draw.line(self.screen,(92,55,28),(x,raft_visual.top+3),(x,raft_visual.bottom-3),3)
         self.player.draw(self.screen)
         hud=pygame.Rect(0,0,WIDTH,30)
         pygame.draw.rect(self.screen,(20,20,20),hud)
