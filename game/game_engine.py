@@ -15,6 +15,7 @@ WATER_H=70
 RAFT_W=180
 RAFT_SPEED=2
 HIGH_SCORE_PATH=Path(__file__).resolve().parent.parent/"high_scores.json"
+DAY_NIGHT_INTERVAL=30000
 
 class GameEngine:
     def __init__(self):
@@ -26,6 +27,9 @@ class GameEngine:
         self.big_font=pygame.font.SysFont("monospace",44,bold=True)
         self.high_score_path=HIGH_SCORE_PATH
         self.high_scores=self._load_high_scores()
+        self.is_night=False
+        self.last_day_night_switch=pygame.time.get_ticks()
+        self.headlight_surface=pygame.Surface((WIDTH,HEIGHT),pygame.SRCALPHA)
         self.reset()
 
     def reset(self):
@@ -72,6 +76,10 @@ class GameEngine:
         return True
 
     def update(self):
+        now=pygame.time.get_ticks()
+        while now-self.last_day_night_switch>=DAY_NIGHT_INTERVAL:
+            self.is_night=not self.is_night
+            self.last_day_night_switch+=DAY_NIGHT_INTERVAL
         if self.game_over or self.won: return
         previous_raft_x=self.raft.x
         self.raft.x+=self.raft_speed
@@ -116,24 +124,39 @@ class GameEngine:
             self._record_score()
 
     def draw(self):
-        self.screen.fill(BG)
+        background=(14,22,34) if self.is_night else BG
+        lane_color=(55,69,82) if self.is_night else (100,100,100)
+        marking_color=(105,104,76) if self.is_night else (200,200,100)
+        sidewalk_color=(62,66,69) if self.is_night else (150,130,110)
+        water_color=(15,54,78) if self.is_night else (28,115,150)
+        water_edge=(55,105,122) if self.is_night else (90,185,195)
+        raft_color=(94,67,46) if self.is_night else (135,86,44)
+        log_color=(68,51,37) if self.is_night else (92,55,28)
+        hud_color=(7,12,21) if self.is_night else (20,20,20)
+        self.screen.fill(background)
         # road markings
         for i in range(LANES+1):
-            pygame.draw.line(self.screen,(100,100,100),(i*LANE_W,0),(i*LANE_W,HEIGHT),2)
+            pygame.draw.line(self.screen,lane_color,(i*LANE_W,0),(i*LANE_W,HEIGHT),2)
         for y in range(0,HEIGHT,60):
             for i in range(LANES):
-                pygame.draw.rect(self.screen,(200,200,100),pygame.Rect(i*LANE_W+LANE_W//2-3,y,6,30))
+                pygame.draw.rect(self.screen,marking_color,pygame.Rect(i*LANE_W+LANE_W//2-3,y,6,30))
         # sidewalks
-        pygame.draw.rect(self.screen,(150,130,110),pygame.Rect(0,HEIGHT-50,WIDTH,50))
-        pygame.draw.rect(self.screen,(150,130,110),pygame.Rect(0,0,WIDTH,30))
-        for c in self.cars: c.draw(self.screen)
-        pygame.draw.rect(self.screen,(28,115,150),pygame.Rect(0,WATER_Y,WIDTH,WATER_H))
-        pygame.draw.line(self.screen,(90,185,195),(0,WATER_Y),(WIDTH,WATER_Y),2)
-        pygame.draw.line(self.screen,(90,185,195),(0,WATER_Y+WATER_H),(WIDTH,WATER_Y+WATER_H),2)
+        pygame.draw.rect(self.screen,sidewalk_color,pygame.Rect(0,HEIGHT-50,WIDTH,50))
+        pygame.draw.rect(self.screen,sidewalk_color,pygame.Rect(0,0,WIDTH,30))
+        if self.is_night:
+            self.headlight_surface.fill((0,0,0,0))
+            for c in self.cars: self._draw_headlight_beams(c)
+            self.screen.blit(self.headlight_surface,(0,0))
+        for c in self.cars:
+            c.draw(self.screen)
+            if self.is_night: self._draw_headlight_lamps(c)
+        pygame.draw.rect(self.screen,water_color,pygame.Rect(0,WATER_Y,WIDTH,WATER_H))
+        pygame.draw.line(self.screen,water_edge,(0,WATER_Y),(WIDTH,WATER_Y),2)
+        pygame.draw.line(self.screen,water_edge,(0,WATER_Y+WATER_H),(WIDTH,WATER_Y+WATER_H),2)
         raft_visual=pygame.Rect(self.raft.x,WATER_Y+7,RAFT_W,WATER_H-14)
-        pygame.draw.rect(self.screen,(135,86,44),raft_visual,border_radius=8)
+        pygame.draw.rect(self.screen,raft_color,raft_visual,border_radius=8)
         for x in range(self.raft.x+24,self.raft.right,28):
-            pygame.draw.line(self.screen,(92,55,28),(x,raft_visual.top+3),(x,raft_visual.bottom-3),3)
+            pygame.draw.line(self.screen,log_color,(x,raft_visual.top+3),(x,raft_visual.bottom-3),3)
         self.player.draw(self.screen)
         hud=pygame.Rect(0,0,WIDTH,30)
         pygame.draw.rect(self.screen,(20,20,20),hud)
@@ -144,6 +167,24 @@ class GameEngine:
         if self.won:
             self._msg("YOU MADE IT!",(80,220,80))
         pygame.display.flip()
+
+    def _draw_headlight_beams(self,car):
+        if car.direction==1:
+            near_y=car.rect.bottom
+            far_y=min(HEIGHT,near_y+180)
+        else:
+            near_y=car.rect.top
+            far_y=max(0,near_y-180)
+        for center_x in (car.rect.x+18,car.rect.x+42):
+            pygame.draw.polygon(self.headlight_surface,(255,226,145,38),[
+                (center_x-4,near_y),(center_x+4,near_y),
+                (center_x+38,far_y),(center_x-38,far_y),
+            ])
+
+    def _draw_headlight_lamps(self,car):
+        lamp_y=car.rect.bottom-8 if car.direction==1 else car.rect.top+3
+        for lamp_x in (car.rect.x+9,car.rect.x+45):
+            pygame.draw.ellipse(self.screen,(255,242,180),pygame.Rect(lamp_x,lamp_y,7,5))
 
     def _msg(self,text,color):
         ov=pygame.Surface((WIDTH,HEIGHT),pygame.SRCALPHA)
